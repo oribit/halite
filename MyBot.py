@@ -3,8 +3,8 @@ import logging
 import time
 import random
 from collections import OrderedDict
-game = hlt.Game("Ganon-V6")
-logging.info("Starting GanonBot-V6")
+game = hlt.Game("Ganon-V7")
+logging.info("Starting GanonBot-V7")
 
 MIN_NUM_DOCKED = 3                      # Minimum number of DOCKED ships that I accept
 DELTA_NUM_SHIP_DOCKED = 4               # Max difference between my docked ships and the player with most docked
@@ -25,10 +25,11 @@ comandos = {'mining' : [],
 assigned_comando = []
 
 class ship_plan():
-    def __init__(self, id, planet=-1, ship=-1):
+    def __init__(self, id, planet=-1, ship=-1, position=hlt.entity.Position(-1, -1)):
         self.id = id
         self.target_planet = planet
         self.target_ship = ship
+        self.position = position
 
     def __str__(self):
         return 'Plan Id: {} with Target Planet: {} and Target Ship: {}'.format(self.id, self.target_planet, self.target_ship)
@@ -101,10 +102,8 @@ def attack_ship(ship, target_ship, all_ships_k, game_map, my_ships_with_plans, c
         speed=int(hlt.constants.MAX_SPEED),
         angular_step=5,
         ignore_ships=False)
-
     if not navigate_command:
         logging.info("ATLETI!")
-
     if navigate_command:
         command_queue.append(navigate_command)
         my_ships_with_plans[ship.id] = ship_plan(ship.id, ship=target_ship.id)
@@ -112,15 +111,77 @@ def attack_ship(ship, target_ship, all_ships_k, game_map, my_ships_with_plans, c
     return True
 
 
+def move_ship_to(ship, target, game_map, speed, my_ships_with_plans, command_queue):
+    navigate_command = ship.navigate(
+        target,
+        game_map,
+        speed=speed,
+        ignore_ships=False)
+    if not navigate_command:
+        logging.info("ATLETI!")
+    if navigate_command:
+        command_queue.append(navigate_command)
+        my_ships_with_plans[ship.id] = ship_plan(ship.id, position=target)
+
+def ssquad_calc_pos(ship, new_pos, direction, max_x, max_y):
+    navigating = False
+    speed = int(hlt.constants.MAX_SPEED)
+    if new_pos.x != -1:
+        # If we have a position set, we need to know if we are there
+        if not (int(new_pos.x - 1) <= int(ship.x) <= int(new_pos.x + 1)) and \
+           not (int(new_pos.y - 1) <= int(ship.y) <= int(new_pos.y + 1)):
+
+            if (direction == 'left' and (int(ship.x - speed) <= 0 <= int(ship.x + speed))) or \
+             (direction == 'right' and (int(ship.x - speed) <= max_x <= int(ship.x + speed))) or \
+             (direction == 'up' and (int(ship.y - speed) <= 0 <= int(ship.y + speed))) or \
+             (direction == 'down' and (int(ship.y - speed) <= max_y <= int(ship.y + speed))):
+                logging.info("We are too close, reducing speed. max_x %s, max_y %s - Ship(%s,%s)", max_x, max_y,
+                             int(ship.x), int(ship.y))
+                speed = int(speed / 3)
+
+            logging.info("This SSQUAD still is navigating")
+            navigating = True
+
+        if not navigating:
+            if int(ship.y) >= max_y - 1:
+                if int(ship.x) <= 0 + 1:
+                    direction = 'up'
+                    new_pos.y = 0
+                else:
+                    direction = 'left'
+                    new_pos.x = 0
+            elif int(ship.y) <= 0 + 1:
+                if int(ship.x) >= max_x - 1:
+                    direction = 'down'
+                    new_pos.y = max_y
+                else:
+                    direction = 'right'
+                    new_pos.x = max_x
+    else:
+        if ship.y > max_y / 2:
+            # Going down
+            direction = 'down'
+            new_pos.x = ship.x
+            new_pos.y = max_y
+        else:
+            direction = 'up'
+            new_pos.x = ship.x
+            new_pos.y = 0
+    #logging.info("I'm at (%s,%s) int INT (%s, %s) and WILL GO to (%s,%s) with direction = %s", ship.x, ship.y, int(ship.x), int(ship.y), new_pos.x, new_pos.y, direction)
+
+    return [new_pos, direction, speed]
 
 ################ TURN START ###################
 my_ships = [] # Just an initialization out of the game
 info_my_ships = {}
+ssquad_pos = {}
 
 while True:
     time1 = time.time()
     game_map = game.update_map()
     player_id = game_map.get_me().id
+    max_x = int(game_map.width)
+    max_y = int(game_map.height)
     command_queue = []
     myself = game_map.my_id
     enemy_planets = {}
@@ -307,6 +368,9 @@ while True:
                     # Let's use ship_helping to specify that we need to attack that ship
                     ship_helping = planet_plan.all_docked_ships()[0].id
                     logging.info("This planet is owned! Let's attack to one docked ship: %s", ship_helping)
+            elif my_ships_with_plans[ship.id].position != hlt.entity.Position(-1, -1):
+                logging.info("This ship has plans to move to a position %s", my_ships_with_plans[ship.id].position)
+                # For this kind of plan, we don't do anything else
             else:
                 logging.info("This ship has plans to attack %s", my_ships_with_plans[ship.id].target_ship)
                 if should_mine_planet:
@@ -424,10 +488,24 @@ while True:
             if not we_have_a_plan:
 
                 #TODO: We have to check the different COMANDOS!!!!
+                if ship.id in comandos['suicide_squad']:
+                    logging.info("We have one SUICIDE SQUAD!")
 
+                    if ship.id not in ssquad_pos:
+                        ssquad_pos[ship.id] = [hlt.entity.Position(-1, -1), '0']
 
+                    new_pos = ssquad_pos[ship.id][0]
+                    direction = ssquad_pos[ship.id][1]
 
-                if len(closest_enemy_ships) > 0:
+                    navigating = False
+                    speed = int(hlt.constants.MAX_SPEED)
+
+                    l = ssquad_calc_pos(ship, new_pos, direction, max_x, max_y)
+                    ssquad_pos[ship.id] = [l[0], l[1]]
+                    speed = l[2]
+                    move_ship_to(ship, l[0], game_map, speed, my_ships_with_plans, command_queue)
+
+                elif len(closest_enemy_ships) > 0:
                     if ship_helping != -1:
                         logging.info("Going to help")
                         target_ship = all_ships[ship_helping]
