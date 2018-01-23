@@ -4,7 +4,7 @@ import time
 import random
 from collections import OrderedDict
 game = hlt.Game("Ganon-V7")
-logging.info("Starting GanonBot-V7")
+#logging.info("Starting GanonBot-V7")
 
 MIN_NUM_DOCKED = 3                      # Minimum number of DOCKED ships that I accept
 DELTA_NUM_SHIP_DOCKED = 4               # Max difference between my docked ships and the player with most docked
@@ -12,14 +12,14 @@ NUM_MAX_SHIP_DOCKED_SAME_PLANET = 4     # Max number of ships docked to the same
 
 MAX_NUM_SHIP_SAME_TARGET = 3            # Number of ships with the same target
 
-PCT_EXPLORERS = .15                                         # Percentage of EXPLORERS ships
+PCT_EXPLORERS = .20                                        # Percentage of EXPLORERS ships
 PCT_SUPPORT = .50                                           # Percentage of SUPPORT ships
-PCT_LONE = .20                                              # Percentage of LONE_RANGER ships
-PCT_SUICIDE = 1 - PCT_EXPLORERS - PCT_SUPPORT - PCT_LONE    # Percentage of SUICIDE_SQUAD ships
+PCT_LONE = .10                                              # Percentage of rogue_one ships
+PCT_ROGUE1 = 1 - PCT_EXPLORERS - PCT_SUPPORT - PCT_LONE    # Percentage of ROGUE1 ships
 
 comandos = {'mining' : [],
-            'suicide_squad' : [], # 15%
-            'lone_ranger': [],    # 15%
+            'lone_ranger' : [], # 15%
+            'rogue_one': [],    # 15%
             'support': [],        # 45%
             'explorers': []}      # 25%
 assigned_comando = []
@@ -62,12 +62,12 @@ def mine_planet(ship, target_planet, game_map, my_ships_with_plans, command_queu
     :param command_queue:
     :return: type_mine -> 0 -> Is Docking, 1 -> Is flying
     """
-    logging.info("Let's MINE with ship %s to planet %s", ship.id, target_planet)
+    #logging.info("Let's MINE with ship %s to planet %s", ship.id, target_planet)
     type_mine = -1
     if ship.can_dock(target_planet):
         command_queue.append(ship.dock(target_planet))
         my_ships_with_plans[ship.id] = ship_plan(ship.id, planet=target_planet.id)
-        logging.info("SHIP PLANS1 %s %s", ship.id, my_ships_with_plans[ship.id])
+        #logging.info("SHIP PLANS1 %s %s", ship.id, my_ships_with_plans[ship.id])
         type_mine = 0
     else:
         navigate_command = ship.navigate(
@@ -86,14 +86,14 @@ def mine_planet(ship, target_planet, game_map, my_ships_with_plans, command_queu
         if navigate_command:
             command_queue.append(navigate_command)
             my_ships_with_plans[ship.id] = ship_plan(ship.id, planet=target_planet.id)
-            logging.info("SHIP PLANS2 %s %s", ship.id, my_ships_with_plans[ship.id])
+            #logging.info("SHIP PLANS2 %s %s", ship.id, my_ships_with_plans[ship.id])
             type_mine = 1
 
     return type_mine
 
 
 def attack_ship(ship, target_ship, all_ships_k, game_map, my_ships_with_plans, command_queue):
-    logging.info("Let's ATTACK with ship %s to ship %s", ship.id, target_ship)
+    #logging.info("Let's ATTACK with ship %s to ship %s", ship.id, target_ship)
 
     pos = ship.closest_point_to(target_ship)
     navigate_command = ship.navigate(
@@ -115,6 +115,7 @@ def move_ship_to(ship, target, game_map, speed, my_ships_with_plans, command_que
     navigate_command = ship.navigate(
         target,
         game_map,
+        max_corrections=180,
         speed=speed,
         ignore_ships=False)
     if not navigate_command:
@@ -123,34 +124,40 @@ def move_ship_to(ship, target, game_map, speed, my_ships_with_plans, command_que
         command_queue.append(navigate_command)
         my_ships_with_plans[ship.id] = ship_plan(ship.id, position=target)
 
-def ssquad_calc_pos(ship, new_pos, direction, max_x, max_y):
+def rogue1_calc_pos(ship, new_pos, direction, max_x, min_x, max_y, min_y):
     navigating = False
     speed = int(hlt.constants.MAX_SPEED)
     if new_pos.x != -1:
-        # If we have a position set, we need to know if we are there
-        if not (int(new_pos.x - 1) <= int(ship.x) <= int(new_pos.x + 1)) and \
+        #logging.info("ATLETI1 %s %s %s %s", new_pos.x, new_pos.y, ship.x, ship.y)
+        if not (int(new_pos.x - 1) <= int(ship.x) <= int(new_pos.x + 1)) or \
            not (int(new_pos.y - 1) <= int(ship.y) <= int(new_pos.y + 1)):
+            #logging.info("ATLETI2: speed %s X- %s X+ %s Y- %s Y+ %s", speed, int(ship.x - speed), int(ship.x + speed), int(ship.y - speed), int(ship.y + speed))
 
-            if (direction == 'left' and (int(ship.x - speed) <= 0 <= int(ship.x + speed))) or \
-             (direction == 'right' and (int(ship.x - speed) <= max_x <= int(ship.x + speed))) or \
-             (direction == 'up' and (int(ship.y - speed) <= 0 <= int(ship.y + speed))) or \
-             (direction == 'down' and (int(ship.y - speed) <= max_y <= int(ship.y + speed))):
-                logging.info("We are too close, reducing speed. max_x %s, max_y %s - Ship(%s,%s)", max_x, max_y,
-                             int(ship.x), int(ship.y))
-                speed = int(speed / 3)
+            if direction == 'left' and (int(ship.x - speed) < min_x):
+                speed = int(ship.x - min_x)
+                #logging.info("Too close to X = 0 so adjusting speed %s", speed)
+            elif direction == 'right' and (int(ship.x + speed) > max_x):
+                speed = int(max_x - ship.x)
+                #logging.info("Too close to X = MAX_X so adjusting speed %s", speed)
+            elif direction == 'up' and (int(ship.y - speed) < min_y):
+                speed = int(ship.y - min_y)
+                #logging.info("Too close to Y = 0 so adjusting speed %s", speed)
+            elif direction == 'down' and (int(ship.y + speed) > max_y):
+                speed = int(max_y - ship.y)
+                #logging.info("Too close to Y = MAX_Y so adjusting speed %s", speed)
 
-            logging.info("This SSQUAD still is navigating")
+            #logging.info("STILL NAVIGATING")
             navigating = True
 
         if not navigating:
             if int(ship.y) >= max_y - 1:
-                if int(ship.x) <= 0 + 1:
+                if int(ship.x) <= min_x + 1:
                     direction = 'up'
-                    new_pos.y = 0
+                    new_pos.y = min_y
                 else:
                     direction = 'left'
-                    new_pos.x = 0
-            elif int(ship.y) <= 0 + 1:
+                    new_pos.x = min_x
+            elif int(ship.y) <= min_y + 1:
                 if int(ship.x) >= max_x - 1:
                     direction = 'down'
                     new_pos.y = max_y
@@ -168,20 +175,21 @@ def ssquad_calc_pos(ship, new_pos, direction, max_x, max_y):
             new_pos.x = ship.x
             new_pos.y = 0
     #logging.info("I'm at (%s,%s) int INT (%s, %s) and WILL GO to (%s,%s) with direction = %s", ship.x, ship.y, int(ship.x), int(ship.y), new_pos.x, new_pos.y, direction)
-
     return [new_pos, direction, speed]
 
 ################ TURN START ###################
 my_ships = [] # Just an initialization out of the game
 info_my_ships = {}
-ssquad_pos = {}
+rogue1_pos = {}
 
 while True:
     time1 = time.time()
     game_map = game.update_map()
     player_id = game_map.get_me().id
-    max_x = int(game_map.width)
-    max_y = int(game_map.height)
+    max_x = int(game_map.width - 1)
+    min_x = 1
+    max_y = int(game_map.height - 1)
+    min_y = 1
     command_queue = []
     myself = game_map.my_id
     enemy_planets = {}
@@ -194,8 +202,8 @@ while True:
     turn += 1
 
     ####### Planet Analysis
-    logging.info("Turn: %s Player: %s", turn, player_id)
-    logging.info("Analysing planets")
+    #logging.info("Turn: %s Player: %s", turn, player_id)
+    #logging.info("Analysing planets")
     for planet in game_map.all_planets():
         if planet.radius > big_planet:
             big_planet = planet.radius
@@ -250,9 +258,9 @@ while True:
 
     planet_we_should_mine = None
     should_mine_planet = (max > ships_not_undocked + DELTA_NUM_SHIP_DOCKED) or (ships_not_undocked < MIN_NUM_DOCKED)
-    logging.info("Should you mine planet? %s  Look: Enemy MAX docked: %s Mine Docked: %s", should_mine_planet, max, ships_not_undocked )
+    #logging.info("Should you mine planet? %s  Look: Enemy MAX docked: %s Mine Docked: %s", should_mine_planet, max, ships_not_undocked )
     #should_mine_planet = (bool([a for a in enemy_planets.values() if len(a) > (len(my_planets) + 2)])) or len(my_planets) < MIN_NUM_DOCKED
-    #logging.info("Should you mine planet? %s  Look: %s", should_mine_planet, [a for a in enemy_planets.values() if len(a) > (len(my_planets) + 2)])
+    ##logging.info("Should you mine planet? %s  Look: %s", should_mine_planet, [a for a in enemy_planets.values() if len(a) > (len(my_planets) + 2)])
 
     # Checking comandos
     t_assigned_comando = assigned_comando[:]
@@ -269,22 +277,22 @@ while True:
             if sid not in all_ships:
                 comandos[k].remove(sid)
 
-    logging.info("My planets: %s", my_planets)
-    logging.info("Empty planets: %s", empty_planets)
-    logging.info("Ememy planets: %s", enemy_planets)
-    logging.info("Enemy docked: %s", enemy_docked)
-    logging.info("Ship in comandos: %s", assigned_comando)
-    logging.info("Comandos: %s", comandos)
-    logging.info("All ships: %s", all_ships.keys())
-    logging.info("My plans: %s", my_ships_with_plans)
+    #logging.info("My planets: %s", my_planets)
+    #logging.info("Empty planets: %s", empty_planets)
+    #logging.info("Ememy planets: %s", enemy_planets)
+    #logging.info("Enemy docked: %s", enemy_docked)
+    #logging.info("Ship in comandos: %s", assigned_comando)
+    #logging.info("Comandos: %s", comandos)
+    #logging.info("All ships: %s", all_ships.keys())
+    #logging.info("My plans: %s", my_ships_with_plans)
 
     for ship in my_ships:
-        logging.info("Ship %s", ship.id)
+        #logging.info("Ship %s", ship.id)
 
         # Calculating distances
         entities_by_distance = game_map.nearby_entities_by_distance(ship)
         entities_by_distance = OrderedDict(sorted(entities_by_distance.items(), key=lambda t: t[0]))
-        #logging.info("ATLETI: %s", entities_by_distance)
+        ##logging.info("ATLETI: %s", entities_by_distance)
         # TODO: This should be done in one loop
         closest_empty_planets = []
         closest_enemy_ships = []
@@ -313,9 +321,9 @@ while True:
 
         if ship.docking_status != ship.DockingStatus.UNDOCKED:
             # Skip this ship
-            logging.info("Ship docked/docking")
+            #logging.info("Ship docked/docking")
             if ship.docking_status == ship.DockingStatus.DOCKED and ship.health < my_previous_info_ships[ship.id].health:
-                logging.info("This ship is being ATTACKED!!")
+                #logging.info("This ship is being ATTACKED!!")
                 # This ship is being attacked we need help!
                 for dist, ent in entities_by_distance.items():
                     # I'd assum the closest ship will be the one attacking
@@ -329,7 +337,7 @@ while True:
         # If we are under attack, someone should help
         ship_helping = -1
         if len(ships_need_help) > 0:
-            logging.info("Ships who need help: %s", ships_need_help)
+            #logging.info("Ships who need help: %s", ships_need_help)
             count = 0
             for dist, ent in entities_by_distance.items():
                 # If the ship is "close" to the one needing help, will help
@@ -337,7 +345,7 @@ while True:
                 for sh in ships_need_help:
                     if (isinstance(ent[0], hlt.entity.Ship) and ent[0].id == sh.shipid) or \
                        (isinstance(ent[0], hlt.entity.Planet) and ent[0].id == sh.planetid):
-                        logging.info("This ship is close to the SHIP/PLANET who needs help")
+                        #logging.info("This ship is close to the SHIP/PLANET who needs help")
                         # HELP SHIP
                         ship_helping = sh.enemyid
                         break
@@ -350,7 +358,7 @@ while True:
         plan_executed = -1
         if ship.id in my_ships_with_plans and ship_helping == -1:
             if my_ships_with_plans[ship.id].target_planet > -1:
-                logging.info("This ship has plans to mine %s", my_ships_with_plans[ship.id].target_planet)
+                #logging.info("This ship has plans to mine %s", my_ships_with_plans[ship.id].target_planet)
 
                 # We need to check if the planet is empty or occupied by an enemy. If it's ocuppied, battle time
                 planet_plan = game_map.get_planet(my_ships_with_plans[ship.id].target_planet)
@@ -367,21 +375,22 @@ while True:
                 elif planet_plan.owner.id != player_id:
                     # Let's use ship_helping to specify that we need to attack that ship
                     ship_helping = planet_plan.all_docked_ships()[0].id
-                    logging.info("This planet is owned! Let's attack to one docked ship: %s", ship_helping)
+                    #logging.info("This planet is owned! Let's attack to one docked ship: %s", ship_helping)
             elif my_ships_with_plans[ship.id].position != hlt.entity.Position(-1, -1):
-                logging.info("This ship has plans to move to a position %s", my_ships_with_plans[ship.id].position)
+                #logging.info("This ship has plans to move to a position %s", my_ships_with_plans[ship.id].position)
                 # For this kind of plan, we don't do anything else
+                pass
             else:
-                logging.info("This ship has plans to attack %s", my_ships_with_plans[ship.id].target_ship)
+                #logging.info("This ship has plans to attack %s", my_ships_with_plans[ship.id].target_ship)
                 if should_mine_planet:
                     # We need to change plans
-                    logging.info("We need to change plans from attack to mine.")
+                    #logging.info("We need to change plans from attack to mine.")
                     pass
                 else:
                     if my_ships_with_plans[ship.id].target_ship in all_ships:
                         plan_executed = attack_ship(ship, all_ships[my_ships_with_plans[ship.id].target_ship], all_ships.keys(), game_map, my_ships_with_plans, command_queue)
                     else:
-                        logging.info("Oh! The ship is gone!")
+                        #logging.info("Oh! The ship is gone!")
                         if ship.id in my_ships_with_plans:
                             my_ships_with_plans.pop(ship.id)
 
@@ -391,24 +400,25 @@ while True:
 
                 new_comando = random.choice(list(comandos))
 
-                if (new_comando == 'explorers' and len(comandos['explorers']) < (len(my_ships) * PCT_EXPLORERS)) or should_mine_planet:
-                    comandos['explorers'].append(ship.id)
-                    assigned_comando.append(ship.id)
-                    logging.info("This SHIP is EXPLORER")
-                elif new_comando == 'lone_ranger' and len(comandos['lone_ranger']) < (len(my_ships) * PCT_LONE):
+                # First we check lone_ranger, then the rest to avoid a lone_ranger change in case of should_mine = True
+                if new_comando == 'lone_ranger' and len(comandos['lone_ranger']) < ((len(my_ships) - len(comandos['mining'])) * PCT_LONE) and len(my_planets) > 0:
                     comandos['lone_ranger'].append(ship.id)
                     assigned_comando.append(ship.id)
-                    logging.info("This SHIP is an LONE_RANGER")
-                elif new_comando == 'suicide_squad' and len(comandos['suicide_squad']) < (len(my_ships) * PCT_SUICIDE):
-                    comandos['suicide_squad'].append(ship.id)
+                    #logging.info("This SHIP is lone_ranger")
+                elif (new_comando == 'explorers' and len(comandos['explorers']) < ((len(my_ships) - len(comandos['mining'])) * PCT_EXPLORERS)) or should_mine_planet:
+                    comandos['explorers'].append(ship.id)
                     assigned_comando.append(ship.id)
-                    logging.info("This SHIP is SUICIDE_SQUAD")
+                    #logging.info("This SHIP is EXPLORER")
+                elif new_comando == 'rogue_one' and len(comandos['rogue_one']) < ((len(my_ships) - len(comandos['mining'])) * PCT_ROGUE1):
+                    comandos['rogue_one'].append(ship.id)
+                    assigned_comando.append(ship.id)
+                    #logging.info("This SHIP is a rogue_one")
                 else:
                     #elif new_comando == 'support' and len(comandos['support']) < (len(my_ships) * PCT_SUPPORT):
                     # By "Default" SUPPORT
                     comandos['support'].append(ship.id)
                     assigned_comando.append(ship.id)
-                    logging.info("This SHIP is SUPPORT")
+                    #logging.info("This SHIP is SUPPORT")
 
             we_have_a_plan = False
             planet_already_targeted = False
@@ -420,42 +430,42 @@ while True:
                     - If I have "much" fewer planets -> Mining
                 '''
 
-                if (ship.id in comandos['explorers']) or should_mine_planet:
-                    logging.info("New MINE plan!")
+                if (ship.id in comandos['explorers'] or should_mine_planet) and ship.id not in comandos['lone_ranger']:
+                    #logging.info("New MINE plan!")
 
                     # Check if we have a big planet, let's try to get more from it
                     count = 0
-                    logging.info("Let check if I should dock in my own planet")
+                    #logging.info("Let check if I should dock in my own planet")
                     pc = closest_planets[0]
                     if pc.owner is not None and pc.owner.id == player_id:
-                        logging.info("Checking radius and MAX")
+                        #logging.info("Checking radius and MAX")
                         if pc.radius == big_planet and \
                            len(pc.all_docked_ships()) < NUM_MAX_SHIP_DOCKED_SAME_PLANET and \
                            not pc.is_full():
-                            logging.info("Yes! We should dock in my own planet")
+                            #logging.info("Yes! We should dock in my own planet")
                             target_planet = pc
                             we_have_a_plan = True
 
                     if not we_have_a_plan:
                         count = 0
                         if planet_we_should_mine is not None:
-                            logging.info('1')
+                            #logging.info('1')
                             target_planet = planet_we_should_mine
                         else:
-                            logging.info('2')
+                            #logging.info('2')
                             target_planet = closest_empty_planets[0]
-                        logging.info("Ship assigned to planet: %s", target_planet)
+                        #logging.info("Ship assigned to planet: %s", target_planet)
                         for tp in closest_empty_planets:
                             # I'm going to check which of the three closest planets is better to go
                             count += 1
                             planet_already_targeted = False
-                            logging.info('Checking planet: %s', tp)
+                            #logging.info('Checking planet: %s', tp)
                             for sid, plans in my_ships_with_plans.items():
                                 if sid != ship.id and plans.target_planet == tp.id:
-                                    logging.info('Someone going to this planet')
+                                    #logging.info('Someone going to this planet')
                                     # If someones is already going to this planet but is one big planet with free "spots", let's go
                                     if tp.radius == big_planet and len(tp.all_docked_ships()) + 1 < tp.num_docking_spots:
-                                        logging.info('But is a big planet, worthy to go!')
+                                        #logging.info('But is a big planet, worthy to go!')
                                         # If somoeone if going there is a posibility to crash both ships
                                         # Halite is making too much mistakes even with ignore_ships = False
                                         # So we "modify" where is the planet, to calculate a new direction
@@ -465,9 +475,9 @@ while True:
                                         planet_already_targeted = True
                                     break
                             if not planet_already_targeted:
-                                logging.info('No one is going to this planet')
+                                #logging.info('No one is going to this planet')
                                 if tp.radius > target_planet.radius:
-                                    logging.info('This planet is better')
+                                    #logging.info('This planet is better')
                                     target_planet = tp
                             if count >= 3:
                                 break
@@ -488,31 +498,37 @@ while True:
             if not we_have_a_plan:
 
                 #TODO: We have to check the different COMANDOS!!!!
-                if ship.id in comandos['suicide_squad']:
-                    logging.info("We have one SUICIDE SQUAD!")
+                if ship.id in comandos['lone_ranger']:
+                    #logging.info("We have one LONE RANGER!")
 
-                    if ship.id not in ssquad_pos:
-                        ssquad_pos[ship.id] = [hlt.entity.Position(-1, -1), '0']
+                    if ship.id not in rogue1_pos:
+                        rogue1_pos[ship.id] = [hlt.entity.Position(-1, -1), '0']
 
-                    new_pos = ssquad_pos[ship.id][0]
-                    direction = ssquad_pos[ship.id][1]
+                    new_pos = rogue1_pos[ship.id][0]
+                    direction = rogue1_pos[ship.id][1]
 
                     navigating = False
                     speed = int(hlt.constants.MAX_SPEED)
 
-                    l = ssquad_calc_pos(ship, new_pos, direction, max_x, max_y)
-                    ssquad_pos[ship.id] = [l[0], l[1]]
+                    l = rogue1_calc_pos(ship, new_pos, direction, max_x, min_x, max_y, min_y)
+                    rogue1_pos[ship.id] = [l[0], l[1]]
                     speed = l[2]
                     move_ship_to(ship, l[0], game_map, speed, my_ships_with_plans, command_queue)
-
                 elif len(closest_enemy_ships) > 0:
                     if ship_helping != -1:
-                        logging.info("Going to help")
+                        #logging.info("Going to help")
                         target_ship = all_ships[ship_helping]
                     else:
-                        target_ship = closest_enemy_ships[0]
-                        logging.info("ATTACK plan against %s", target_ship.id)
+                        if ship.id in comandos['rogue_one']:
+                            #logging.info("We have one ROGUE ONE!")
+                            for planet in closest_planets:
+                                if planet.owner is not None and planet.owner.id != player_id:
+                                    target_ship = planet.all_docked_ships()[0]
+                                    break
+                        else:
+                            target_ship = closest_enemy_ships[0]
 
+                    #logging.info("ATTACK plan against %s", target_ship.id)
                     count = 0
                     for shipid, plan in my_ships_with_plans.items():
                         if plan.target_ship == target_ship.id:
@@ -522,7 +538,7 @@ while True:
                     if count >= 3:
                         if len(closest_enemy_ships) > 1:
                             target_ship = closest_enemy_ships[1]
-                            logging.info("Too many ships already targeting this one. Let's find another: %s", target_ship.id)
+                            #logging.info("Too many ships already targeting this one. Let's find another: %s", target_ship.id)
 
                     attack_ship(ship, target_ship, all_ships.keys(), game_map, my_ships_with_plans, command_queue)
                     for k, v in comandos.items():
@@ -533,7 +549,7 @@ while True:
 
     game.send_command_queue(command_queue)
     time2 = time.time()
-    logging.info("------------------------END TURN %0.3f ms", (time2-time1)*1000.0 )
+    #logging.info("------------------------END TURN %0.3f ms", (time2-time1)*1000.0 )
 
     # TURN END
 # GAME END

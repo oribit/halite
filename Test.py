@@ -30,8 +30,10 @@ while True:
     # Update the map for the new turn and get the latest version
     logging.info("TURN: %s", iturn)
     game_map = game.update_map()
-    max_x = int(game_map.width)
-    max_y = int(game_map.height)
+    max_x = int(game_map.width - 1)
+    min_x = 1
+    max_y = int(game_map.height - 1)
+    min_y = 1
 
 
     # Here we define the set of commands to be sent to the Halite engine at the end of the turn
@@ -49,35 +51,57 @@ while True:
             continue
 
         logging.info("Ship ID: %s", ship.id)
-        logging.info("I'm at (%s,%s) int INT (%s, %s) and WILL GO to (%s,%s) with direction = %s", ship.x, ship.y, int(ship.x), int(ship.y), new_pos.x, new_pos.y, direction)
+        logging.info("I'm at (%s,%s) int (%s, %s) and I should go to (%s,%s) with direction = %s", ship.x, ship.y, int(ship.x), int(ship.y), new_pos.x, new_pos.y, direction)
 
 
         navigating = False
         speed = int(hlt.constants.MAX_SPEED)
         if new_pos.x != -1:
             # If we have a position set, we need to know if we are there
-            if not (int(new_pos.x - 1) <= int(ship.x) <= int(new_pos.x + 1)) and \
-               not (int(new_pos.y - 1) <= int(ship.y) <= int(new_pos.y + 1)):
 
-                if (direction == 'left' and (int(ship.x - speed) <= 0 <= int(ship.x + speed))) or \
-                  (direction == 'right' and (int(ship.x - speed) <= max_x <= int(ship.x + speed))) or \
-                  (direction == 'up' and (int(ship.y - speed) <= 0 <= int(ship.y + speed))) or \
-                  (direction == 'down' and (int(ship.y - speed) <= max_y <= int(ship.y + speed))):
-                    logging.info("We are too close, reducing speed. max_x %s, max_y %s - Ship(%s,%s)", max_x, max_y, int(ship.x), int(ship.y))
-                    speed = int(hlt.constants.MAX_SPEED / 3)
+            '''
+            ship.x = 121
+            ship.y = 19
+            
+            new.x = 120
+            new.y = 0
+            '''
+
+
+            logging.info("ATLETI1 %s %s %s %s", new_pos.x, new_pos.y, ship.x, ship.y)
+
+
+
+
+            if not (int(new_pos.x - 1) <= int(ship.x) <= int(new_pos.x + 1)) or \
+               not (int(new_pos.y - 1) <= int(ship.y) <= int(new_pos.y + 1)):
+                logging.info("ATLETI2: speed %s X- %s X+ %s Y- %s Y+ %s", speed, int(ship.x - speed), int(ship.x + speed), int(ship.y - speed), int(ship.y + speed))
+
+                if direction == 'left' and (int(ship.x - speed) < min_x):
+                    speed = int(ship.x - min_x)
+                    logging.info("Too close to X = 0 so adjusting speed %s", speed)
+                elif direction == 'right' and (int(ship.x + speed) > max_x):
+                    speed = int(max_x - ship.x)
+                    logging.info("Too close to X = MAX_X so adjusting speed %s", speed)
+                elif direction == 'up' and (int(ship.y - speed) < min_y):
+                    speed = int(ship.y - min_y)
+                    logging.info("Too close to Y = 0 so adjusting speed %s", speed)
+                elif direction == 'down' and (int(ship.y + speed) > max_y):
+                    speed = int(max_y - ship.y)
+                    logging.info("Too close to Y = MAX_Y so adjusting speed %s", speed)
 
                 logging.info("STILL NAVIGATING")
                 navigating = True
 
             if not navigating:
                 if int(ship.y) >= max_y - 1:
-                    if int(ship.x) <= 0 + 1:
+                    if int(ship.x) <= min_x + 1:
                         direction = 'up'
-                        new_pos.y = 0
+                        new_pos.y = min_y
                     else:
                         direction = 'left'
-                        new_pos.x = 0
-                elif int(ship.y) <= 0 + 1:
+                        new_pos.x = min_x
+                elif int(ship.y) <= min_y + 1:
                     if int(ship.x) >= max_x - 1:
                         direction = 'down'
                         new_pos.y = max_y
